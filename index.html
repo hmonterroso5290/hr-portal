@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HR Acknowledgment Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --primary: #1f4e9a;
+    --primary-dark: #16386e;
+    --accent: #d4a017;
+    --success: #1f8a4c;
+    --warning: #c97a0d;
+    --danger: #b8332b;
+    --text: #1a1f2e;
+    --muted: #6b7280;
+    --border: #e1e5eb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--primary); color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  .sync-dot { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+  .sync-dot span { width: 10px; height: 10px; border-radius: 50%; background: #888; }
+  .sync-dot.live span { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+  .sync-dot.offline span { background: #e74c3c; }
+  nav { background: white; border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
+  nav button { background: none; border: none; padding: 14px 18px; cursor: pointer; font-size: 14px; color: var(--muted); border-bottom: 3px solid transparent; }
+  nav button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  .card h2 { margin: 0 0 16px 0; font-size: 16px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--primary); margin-top: 4px; }
+  button.btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button.btn:hover { background: var(--primary-dark); }
+  button.btn-secondary { background: white; color: var(--primary); border: 1px solid var(--primary); }
+  button.btn-danger { background: var(--danger); }
+  button.btn-success { background: var(--success); }
+  input, select, textarea { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #f5f7fa; padding: 10px; text-align: left; font-size: 12px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge-success { background: #e6f4ec; color: var(--success); }
+  .badge-warning { background: #fdf1da; color: var(--warning); }
+  .badge-danger { background: #fbe5e3; color: var(--danger); }
+  .badge-muted { background: #eef0f3; color: var(--muted); }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; width: 120px; }
+  .progress-fill { height: 100%; background: var(--success); transition: width 0.3s; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .row.between { justify-content: space-between; }
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .field { margin-bottom: 14px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: white; border-radius: 10px; padding: 24px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+  .signature-canvas { border: 2px dashed var(--border); border-radius: 6px; cursor: crosshair; background: #fafafa; width: 100%; height: 150px; touch-action: none; }
+  .attestation-banner { background: #fdf6e3; border: 1px solid var(--accent); border-radius: 6px; padding: 12px; margin-bottom: 12px; font-size: 13px; color: #6d4c0d; }
+  .consent-box { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); padding: 12px; border-radius: 6px; background: #f9fafb; font-size: 13px; margin-bottom: 12px; }
+  .pdf-page { position: relative; margin: 0 auto 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .sig-marker { position: absolute; background: var(--accent); color: white; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transform: translate(-50%, -50%); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  .sig-marker.signed { background: var(--success); }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .empty-state { text-align: center; padding: 40px; color: var(--muted); }
+  .download-notice { background: #fdf6e3; border: 2px solid var(--accent); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .download-notice h3 { margin-top: 0; color: #6d4c0d; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HR Acknowledgment Portal</h1>
+  <div id="syncDot" class="sync-dot offline"><span></span><em id="syncText">Connecting...</em></div>
+</header>
+
+<nav id="nav">
+  <button data-page="dashboard" class="active">Dashboard</button>
+  <button data-page="employees">Employees</button>
+  <button data-page="files">Employee Files</button>
+  <button data-page="forms">Forms</button>
+  <button data-page="signportal">Sign Portal</button>
+  <button data-page="reminders">Reminders</button>
+  <button data-page="reports">Reports</button>
+  <button data-page="audit">Audit Log</button>
+</nav>
+
+<main id="main"></main>
+
+<script>
+// ===== Supabase Configuration =====
+// Replace these two lines with your Supabase project credentials.
+// Get them from: Supabase Dashboard → Settings → API
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+let supabase = null;
+let connected = false;
+
+// ===== App State =====
+const state = {
+  page: "dashboard",
+  employees: [],
+  forms: [],
+  signatures: [],
+  audit: [],
+  reminders: [],
+  ip: "",
+  signSession: null
+};
+
+// ===== Init =====
+async function init() {
+  // Try connecting to Supabase
+  if (SUPABASE_URL.includes("YOUR_SUPABASE_URL") || SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")) {
+    setSync(false, "Not configured — add Supabase keys in index.html");
+  } else {
+    try {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { error } = await supabase.from("forms").select("id").limit(1);
+      if (error) throw error;
+      connected = true;
+      setSync(true, "Live");
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+      setSync(false, "Connection failed");
+    }
+  }
+
+  // Get IP for audit
+  try {
+    const r = await fetch("https://api.ipify.org?format=json");
+    state.ip = (await r.json()).ip;
+  } catch { state.ip = "unknown"; }
+
+  // PDF.js worker
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  // Nav wiring
+  document.querySelectorAll("nav button").forEach(b => {
+    b.onclick = () => goTo(b.dataset.page);
+  });
+
+  goTo("dashboard");
+}
+
+function setSync(live, text) {
+  const d = document.getElementById("syncDot");
+  d.className = "sync-dot " + (live ? "live" : "offline");
+  document.getElementById("syncText").textContent = text;
+}
+
+async function refreshAll() {
+  if (!connected) return;
+  const [emp, fm, sig, aud, rem] = await Promise.all([
+    supabase.from("employees").select("*").order("last_name"),
+    supabase.from("forms").select("*").order("created_at", { ascending: false }),
+    supabase.from("signatures").select("*"),
+    supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(500),
+    supabase.from("reminders").select("*").order("scheduled_for")
+  ]);
+  state.employees = emp.data || [];
+  state.forms = fm.data || [];
+  state.signatures = sig.data || [];
+  state.audit = aud.data || [];
+  state.reminders = rem.data || [];
+}
+
+function goTo(page) {
+  state.page = page;
+  document.querySelectorAll("nav button").forEach(b => {
+    b.classList.toggle("active", b.dataset.page === page);
+  });
+  const main = document.getElementById("main");
+  switch (page) {
+    case "dashboard": renderDashboard(main); break;
+    case "employees": renderEmployees(main); break;
+    case "files": renderFiles(main); break;
+    case "forms": renderForms(main); break;
+    case "signportal": renderSignPortal(main); break;
+    case "reminders": renderReminders(main); break;
+    case "reports": renderReports(main); break;
+    case "audit": renderAudit(main); break;
+  }
+}
+
+// ===== Audit helper =====
+async function logAudit(event_type, employee_id, form_id, event_data) {
+  if (!connected) return;
+  await supabase.from("audit_log").insert({
+    event_type, employee_id, form_id, event_data,
+    ip_address: state.ip,
+    user_agent: navigator.userAgent
+  });
+}
+
+// ===== DASHBOARD =====
+function renderDashboard(main) {
+  const total = state.signatures.length;
+  const completed = state.signatures.filter(s => s.status === "completed").length;
+  const pending = state.signatures.filter(s => s.status !== "completed").length;
+  const activeForms = state.forms.filter(f => f.active).length;
+
+  main.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Active Forms</div><div class="stat-value">${activeForms}</div></div>
+      <div class="stat"><div class="stat-label">Employees</div><div class="stat-value">${state.employees.length}</div></div>
+      <div class="stat"><div class="stat-label">Signatures Completed</div><div class="stat-value">${completed}</div></div>
+      <div class="stat"><div class="stat-label">Pending</div><div class="stat-value">${pending}</div></div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <h2>Recent Activity</h2>
+        <button class="btn btn-secondary" onclick="goTo('audit')">View full audit log</button>
+      </div>
+      ${state.audit.length === 0 ? '<div class="empty-state">No activity yet</div>' : `
+        <table>
+          <thead><tr><th>When</th><th>Event</th><th>IP</th></tr></thead>
+          <tbody>
+            ${state.audit.slice(0, 8).map(a => `
+              <tr>
+                <td>${new Date(a.created_at).toLocaleString()}</td>
+                <td>${a.event_type.replace(/_/g, " ")}</td>
+                <td>${a.ip_address || ""}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+
+    <div class="card">
+      <h2>Forms Overview</h2>
+      ${state.forms.length === 0 ? '<div class="empty-state">No forms yet — go to Forms tab to create one</div>' : `
+        <table>
+          <thead><tr><th>Form</th><th>Due</th><th>Signed</th><th>Completion</th></tr></thead>
+          <tbody>
+            ${state.forms.map(f => {
+              const sigs = state.signatures.filter(s => s.form_id === f.id && s.status === "completed").length;
+              const pct = state.employees.length ? Math.round(sigs / state.employees.length * 100) : 0;
+              return `
+                <tr>
+                  <td><strong>${escapeHtml(f.name)}</strong></td>
+                  <td>${f.due_date || "—"}</td>
+                  <td>${sigs} / ${state.employees.length}</td>
+                  <td><div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div> ${pct}%</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+// ===== EMPLOYEES =====
+function renderEmployees(main) {
+  main.innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <h2>Employees (${state.employees.length})</h2>
+        <div class="row">
+          <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none" />
+          <button class="btn btn-secondary" onclick="document.getElementById('excelFile').click()">Import Excel</button>
+          <button class="btn" onclick="addEmployeePrompt()">+ Add Employee</button>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">
+        Required columns: First Name, Last Name, Email, Department, Supervisor, Supervisor Email. Optional: Preferred Name, Job Level, Employment Type.
+      </div>
+      ${state.employees.length === 0 ? '<div class="empty-state">No employees yet</div>' : `
+        <table>
+          <thead><tr><th>Name</th><th>Folder</th><th>Email</th><th>Dept</th><th>Supervisor</th><th></th></tr></thead>
+          <tbody>
+            ${state.employees.map(e => `
+              <tr>
+                <td><strong>${escapeHtml(e.first_name)} ${escapeHtml(e.last_name)}</strong></td>
+                <td><span class="badge badge-muted">${escapeHtml(e.folder_name || "")}</span></td>
+                <td>${escapeHtml(e.email)}</td>
+                <td>${escapeHtml(e.department || "")}</td>
+                <td>${escapeHtml(e.supervisor_name || "")}</td>
+                <td><button class="btn btn-danger" onclick="deleteEmployee('${e.id}')" style="padding:4px 10px;font-size:12px">Remove</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+  document.getElementById("excelFile").onchange = handleExcelImport;
+}
+
+async function handleExcelImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf);
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet);
+  if (!rows.length) return alert("No rows found in spreadsheet");
+
+  const toInsert = rows.map(r => ({
+    first_name: pick(r, ["First Name", "first_name", "FirstName"]) || "",
+    last_name: pick(r, ["Last Name", "last_name", "LastName"]) || "",
+    preferred_name: pick(r, ["Preferred Name", "preferred_name"]) || null,
+    email: pick(r, ["Email", "email"]) || "",
+    department: pick(r, ["Department", "department", "Dept"]) || null,
+    job_level: pick(r, ["Job Level", "job_level", "Level"]) || null,
+    employment_type: pick(r, ["Employment Type", "employment_type", "Type"]) || null,
+    supervisor_name: pick(r, ["Supervisor", "supervisor_name", "Manager"]) || null,
+    supervisor_email: pick(r, ["Supervisor Email", "supervisor_email", "Manager Email"]) || null
+  })).filter(r => r.email);
+
+  const { error } = await supabase.from("employees").upsert(toInsert, { onConflict: "email" });
+  if (error) return alert("Import error: " + error.message);
+  await refreshAll();
+  renderEmployees(document.getElementById("main"));
+  alert(`Imported ${toInsert.length} employees.`);
+}
+
+function pick(obj, keys) {
+  for (const k of keys) if (obj[k] !== undefined && obj[k] !== "") return String(obj[k]).trim();
+  return null;
+}
+
+async function addEmployeePrompt() {
+  const first = prompt("First Name:"); if (!first) return;
+  const last = prompt("Last Name:"); if (!last) return;
+  const email = prompt("Email:"); if (!email) return;
+  const dept = prompt("Department:") || null;
+  const sup = prompt("Supervisor name:") || null;
+  const supEmail = prompt("Supervisor email:") || null;
+  const { error } = await supabase.from("employees").insert({
+    first_name: first, last_name: last, email, department: dept,
+    supervisor_name: sup, supervisor_email: supEmail
+  });
+  if (error) return alert(error.message);
+  await refreshAll();
+  renderEmployees(document.getElementById("main"));
+}
+
+async function deleteEmployee(id) {
+  if (!confirm("Remove this employee and all their signatures?")) return;
+  await supabase.from("employees").delete().eq("id", id);
+  await refreshAll();
+  renderEmployees(document.getElementById("main"));
+}
+
+// ===== EMPLOYEE FILES =====
+function renderFiles(main) {
+  main.innerHTML = `
+    <div class="card">
+      <h2>Employee Files</h2>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Folder format: Last Name, First Name (Preferred Name). Click a folder to see what's been signed.</div>
+      <div class="filters">
+        <input id="filesFilter" placeholder="Search by name, email, department..." oninput="renderFilesList()" style="flex:1;min-width:240px" />
+      </div>
+      <div id="filesList"></div>
+    </div>
+  `;
+  renderFilesList();
+}
+
+function renderFilesList() {
+  const q = (document.getElementById("filesFilter")?.value || "").toLowerCase();
+  const list = state.employees.filter(e => {
+    const blob = `${e.first_name} ${e.last_name} ${e.email} ${e.department || ""} ${e.folder_name}`.toLowerCase();
+    return blob.includes(q);
+  });
+  const container = document.getElementById("filesList");
+  if (!list.length) { container.innerHTML = '<div class="empty-state">No employees match</div>'; return; }
+  container.innerHTML = `
+    <table>
+      <thead><tr><th>Folder</th><th>Department</th><th>Forms Signed</th><th>Pending</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(e => {
+          const empSigs = state.signatures.filter(s => s.employee_id === e.id);
+          const done = empSigs.filter(s => s.status === "completed").length;
+          const pending = empSigs.length - done;
+          return `
+            <tr>
+              <td><strong>${escapeHtml(e.folder_name || "")}</strong><br/><span style="font-size:12px;color:var(--muted)">${escapeHtml(e.email)}</span></td>
+              <td>${escapeHtml(e.department || "")}</td>
+              <td><span class="badge badge-success">${done}</span></td>
+              <td>${pending > 0 ? `<span class="badge badge-warning">${pending}</span>` : '<span style="color:var(--muted)">0</span>'}</td>
+              <td><button class="btn btn-secondary" onclick="openEmployeeFolder('${e.id}')" style="padding:4px 10px;font-size:12px">Open Folder</button></td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function openEmployeeFolder(id) {
+  const emp = state.employees.find(e => e.id === id);
+  if (!emp) return;
+  const empSigs = state.signatures.filter(s => s.employee_id === id);
+  const rows = state.forms.map(f => {
+    const sig = empSigs.find(s => s.form_id === f.id);
+    return { form: f, sig };
+  });
+  showModal(`
+    <h2>${escapeHtml(emp.folder_name || "")}</h2>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:12px">${escapeHtml(emp.email)} · ${escapeHtml(emp.department || "—")}</div>
+    <table>
+      <thead><tr><th>Form</th><th>Status</th><th>Signed</th><th>Record</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td>${escapeHtml(r.form.name)}</td>
+            <td>${statusBadge(r.sig?.status || "pending")}</td>
+            <td>${r.sig?.signed_at ? new Date(r.sig.signed_at).toLocaleString() : "—"}</td>
+            <td style="font-family:monospace;font-size:11px">${r.sig?.record_id || "—"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `);
+}
+
+function statusBadge(status) {
+  if (status === "completed") return '<span class="badge badge-success">Completed</span>';
+  if (status === "partial") return '<span class="badge badge-warning">In progress</span>';
+  return '<span class="badge badge-muted">Pending</span>';
+}
+
+// ===== FORMS =====
+function renderForms(main) {
+  main.innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <h2>Forms Library</h2>
+        <button class="btn" onclick="newFormSetup()">+ New Form</button>
+      </div>
+      ${state.forms.length === 0 ? '<div class="empty-state">No forms yet</div>' : `
+        <table>
+          <thead><tr><th>Name</th><th>Due</th><th>Markers</th><th>Departments</th><th>Active</th><th></th></tr></thead>
+          <tbody>
+            ${state.forms.map(f => `
+              <tr>
+                <td><strong>${escapeHtml(f.name)}</strong></td>
+                <td>${f.due_date || "—"}</td>
+                <td>${(f.signature_markers || []).length}</td>
+                <td>${(f.required_departments || []).join(", ") || "All"}</td>
+                <td>${f.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-muted">Off</span>'}</td>
+                <td><button class="btn btn-danger" onclick="deleteForm('${f.id}')" style="padding:4px 10px;font-size:12px">Delete</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+}
+
+async function deleteForm(id) {
+  if (!confirm("Delete this form and all signature records on it?")) return;
+  await supabase.from("forms").delete().eq("id", id);
+  await refreshAll();
+  renderForms(document.getElementById("main"));
+}
+
+let formSetupState = { pdfBytes: null, markers: [], name: "", due: "", departments: "" };
+
+function newFormSetup() {
+  formSetupState = { pdfBytes: null, markers: [], name: "", due: "", departments: "" };
+  showModal(`
+    <h2>New Form</h2>
+    <div class="field">
+      <label>Form name</label>
+      <input id="formName" style="width:100%" placeholder="e.g., Employee Handbook Acknowledgment" />
+    </div>
+    <div class="field">
+      <label>Due date</label>
+      <input type="date" id="formDue" />
+    </div>
+    <div class="field">
+      <label>Required departments (comma separated, blank = all)</label>
+      <input id="formDept" style="width:100%" placeholder="e.g., Engineering, Sales" />
+    </div>
+    <div class="field">
+      <label>Upload PDF</label>
+      <input type="file" id="formPdf" accept="application/pdf" />
+    </div>
+    <div id="pdfViewer" style="margin-top:14px;background:#f5f7fa;padding:8px;border-radius:6px;max-height:50vh;overflow:auto"></div>
+    <div style="font-size:12px;color:var(--muted);margin:8px 0">Click anywhere on the PDF to drop a signature marker.</div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveForm()">Save Form</button>
+    </div>
+  `);
+  document.getElementById("formPdf").onchange = handlePdfUpload;
+}
+
+async function handlePdfUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const buf = await file.arrayBuffer();
+  formSetupState.pdfBytes = new Uint8Array(buf);
+  await renderPdfForMarkerPlacement();
+}
+
+async function renderPdfForMarkerPlacement() {
+  const viewer = document.getElementById("pdfViewer");
+  viewer.innerHTML = "";
+  if (!formSetupState.pdfBytes) return;
+  const pdf = await pdfjsLib.getDocument({ data: formSetupState.pdfBytes.slice(0) }).promise;
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const wrap = document.createElement("div");
+    wrap.className = "pdf-page";
+    wrap.style.width = viewport.width + "px";
+    wrap.style.height = viewport.height + "px";
+    wrap.appendChild(canvas);
+    wrap.dataset.page = i;
+    wrap.onclick = (ev) => {
+      const rect = wrap.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) / rect.width;
+      const y = (ev.clientY - rect.top) / rect.height;
+      formSetupState.markers.push({ page: i, x, y });
+      drawMarkersOnSetupWrap(wrap, i);
+    };
+    viewer.appendChild(wrap);
+    drawMarkersOnSetupWrap(wrap, i);
+  }
+}
+
+function drawMarkersOnSetupWrap(wrap, page) {
+  wrap.querySelectorAll(".sig-marker").forEach(n => n.remove());
+  formSetupState.markers.filter(m => m.page === page).forEach((m, idx) => {
+    const allIdx = formSetupState.markers.indexOf(m) + 1;
+    const node = document.createElement("div");
+    node.className = "sig-marker";
+    node.style.left = (m.x * 100) + "%";
+    node.style.top = (m.y * 100) + "%";
+    node.textContent = "Sign #" + allIdx;
+    node.onclick = (ev) => {
+      ev.stopPropagation();
+      if (confirm("Remove this marker?")) {
+        formSetupState.markers.splice(formSetupState.markers.indexOf(m), 1);
+        drawMarkersOnSetupWrap(wrap, page);
+      }
+    };
+    wrap.appendChild(node);
+  });
+}
+
+async function saveForm() {
+  const name = document.getElementById("formName").value.trim();
+  if (!name) return alert("Form name is required");
+  if (!formSetupState.pdfBytes) return alert("Upload a PDF");
+  if (!formSetupState.markers.length) return alert("Place at least one signature marker on the document");
+  const due = document.getElementById("formDue").value || null;
+  const departments = document.getElementById("formDept").value.split(",").map(d => d.trim()).filter(Boolean);
+
+  // Encode PDF as base64
+  const b64 = btoa(String.fromCharCode(...formSetupState.pdfBytes));
+
+  const { error } = await supabase.from("forms").insert({
+    name, due_date: due, pdf_data: b64,
+    signature_markers: formSetupState.markers,
+    required_departments: departments.length ? departments : null,
+    active: true
+  });
+  if (error) return alert(error.message);
+  closeModal();
+  await refreshAll();
+  renderForms(document.getElementById("main"));
+}
+
+// ===== SIGN PORTAL =====
+function renderSignPortal(main) {
+  main.innerHTML = `
+    <div class="card">
+      <h2>Sign Portal</h2>
+      <p style="color:var(--muted);font-size:14px">Employees enter their email to load assigned forms. ESIGN consent shown first.</p>
+      <div class="field">
+        <label>Email</label>
+        <input id="signEmail" type="email" style="width:300px" placeholder="employee@company.com" />
+      </div>
+      <button class="btn" onclick="startSignSession()">Continue</button>
+      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:14px">
+        <strong>Demo mode</strong> <span style="color:var(--muted);font-size:13px">— preview signing flow as any employee</span><br/>
+        <select id="demoEmp" style="margin-top:8px"></select>
+        <button class="btn btn-secondary" onclick="startDemo()">Preview signing flow</button>
+      </div>
+    </div>
+  `;
+  const sel = document.getElementById("demoEmp");
+  sel.innerHTML = '<option value="">Select employee...</option>' +
+    state.employees.map(e => `<option value="${e.id}">${escapeHtml(e.folder_name)}</option>`).join("");
+}
+
+async function startSignSession() {
+  const email = document.getElementById("signEmail").value.trim().toLowerCase();
+  if (!email) return;
+  const emp = state.employees.find(e => e.email.toLowerCase() === email);
+  if (!emp) return alert("We don't have a record for that email. Please contact HR.");
+  startSignFlow(emp);
+}
+
+function startDemo() {
+  const id = document.getElementById("demoEmp").value;
+  if (!id) return alert("Pick an employee");
+  startSignFlow(state.employees.find(e => e.id === id));
+}
+
+async function startSignFlow(emp) {
+  // Determine which forms this employee should sign
+  const assigned = state.forms.filter(f => {
+    if (!f.active) return false;
+    if (!f.required_departments || !f.required_departments.length) return true;
+    return f.required_departments.includes(emp.department);
+  });
+  if (!assigned.length) return alert("No forms assigned to this employee.");
+  state.signSession = { emp, forms: assigned, current: 0, consentGiven: false };
+  showConsentScreen();
+}
+
+function showConsentScreen() {
+  const { emp } = state.signSession;
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <div class="card" style="max-width:760px;margin:0 auto">
+      <h2>Electronic Signature Consent</h2>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:12px">Signed in as <strong>${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name)}</strong> · ${escapeHtml(emp.email)} · IP ${escapeHtml(state.ip)}</div>
+      <div class="consent-box">
+        <strong>ESIGN Act Disclosure & Consent</strong><br/><br/>
+        By proceeding, you agree to use electronic records and signatures for the documents presented in this portal in accordance with the federal Electronic Signatures in Global and National Commerce Act (ESIGN Act, 15 U.S.C. § 7001 et seq.) and the Uniform Electronic Transactions Act (UETA).<br/><br/>
+        You understand that:
+        <ul>
+          <li>Your electronic signature has the same legal effect as a handwritten signature.</li>
+          <li>You may request a paper copy of any document signed electronically by contacting HR.</li>
+          <li>You may withdraw consent at any time prior to signing by contacting HR; doing so may delay your acknowledgment.</li>
+          <li>You are responsible for retaining a personal copy of each signed document — you will be given the opportunity to download your copy upon completion.</li>
+          <li>The system you are using is compatible with current browsers and PDF viewers; no special hardware is required.</li>
+        </ul>
+        Your IP address, browser, and timestamps will be recorded for each step of this signing session for audit purposes.
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer">
+        <input type="checkbox" id="consentChk" />
+        I have read and agree to the Electronic Signature Consent above.
+      </label>
+      <div style="margin-top:16px">
+        <button class="btn" onclick="acceptConsent()">Continue to Forms</button>
+      </div>
+    </div>
+  `;
+}
+
+async function acceptConsent() {
+  if (!document.getElementById("consentChk").checked) return alert("You must check the consent box to proceed.");
+  state.signSession.consentGiven = true;
+  await logAudit("consent_given", state.signSession.emp.id, null, {});
+  await logAudit("identity_verified", state.signSession.emp.id, null, { email: state.signSession.emp.email });
+  showCurrentForm();
+}
+
+async function showCurrentForm() {
+  const { emp, forms, current } = state.signSession;
+  if (current >= forms.length) return showCompletionScreen();
+  const form = forms[current];
+
+  // Create / load signature record
+  const existing = state.signatures.find(s => s.employee_id === emp.id && s.form_id === form.id);
+  if (!existing) {
+    const { data, error } = await supabase.from("signatures").insert({
+      employee_id: emp.id, form_id: form.id, status: "partial",
+      signature_data: [], ip_address: state.ip, user_agent: navigator.userAgent,
+      esign_consent_at: new Date().toISOString()
+    }).select().single();
+    if (data) state.signatures.push(data);
+    state.signSession.currentSig = data;
+  } else {
+    state.signSession.currentSig = existing;
+  }
+  await logAudit("form_opened", emp.id, form.id, {});
+
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <div class="card" style="max-width:1000px;margin:0 auto">
+      <div class="row between">
+        <h2>${escapeHtml(form.name)}</h2>
+        <span class="badge badge-muted">Form ${current + 1} of ${forms.length}</span>
+      </div>
+      <div class="attestation-banner">
+        ${escapeHtml(form.attestation_text || "By signing below, I acknowledge I have read and understand this document.")}
+      </div>
+      <div id="signPdfViewer" style="background:#f5f7fa;padding:8px;border-radius:6px;max-height:60vh;overflow:auto"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn" onclick="submitCurrentForm()">Submit signed form</button>
+        <span id="signProgress" style="color:var(--muted);font-size:13px"></span>
+      </div>
+    </div>
+  `;
+  await renderPdfForSigning(form);
+}
+
+async function renderPdfForSigning(form) {
+  const viewer = document.getElementById("signPdfViewer");
+  viewer.innerHTML = "";
+  const bytes = Uint8Array.from(atob(form.pdf_data), c => c.charCodeAt(0));
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const wrap = document.createElement("div");
+    wrap.className = "pdf-page";
+    wrap.style.width = viewport.width + "px";
+    wrap.style.height = viewport.height + "px";
+    wrap.appendChild(canvas);
+    wrap.dataset.page = i;
+    viewer.appendChild(wrap);
+    await logAudit("page_viewed", state.signSession.emp.id, form.id, { page: i });
+    placeMarkersOnSignWrap(wrap, i, form);
+  }
+  updateSignProgress();
+}
+
+function placeMarkersOnSignWrap(wrap, page, form) {
+  const sig = state.signSession.currentSig;
+  const data = sig.signature_data || [];
+  form.signature_markers.filter(m => m.page === page).forEach((m) => {
+    const idx = form.signature_markers.indexOf(m);
+    const signed = !!data[idx];
+    const node = document.createElement("div");
+    node.className = "sig-marker" + (signed ? " signed" : "");
+    node.style.left = (m.x * 100) + "%";
+    node.style.top = (m.y * 100) + "%";
+    node.textContent = signed ? "✓ " + (data[idx].typed_name || "Signed") : "Click to Sign";
+    node.onclick = () => openSignatureModal(idx);
+    wrap.appendChild(node);
+  });
+}
+
+function updateSignProgress() {
+  const form = state.signSession.forms[state.signSession.current];
+  const data = state.signSession.currentSig.signature_data || [];
+  const total = form.signature_markers.length;
+  const done = data.filter(Boolean).length;
+  document.getElementById("signProgress").textContent = `${done} of ${total} signature blocks complete`;
+}
+
+function openSignatureModal(markerIdx) {
+  const form = state.signSession.forms[state.signSession.current];
+  showModal(`
+    <h2>Signature Block ${markerIdx + 1}</h2>
+    <div class="attestation-banner">
+      ${escapeHtml(form.attestation_text || "By signing, I acknowledge I have read and understand this document.")}
+    </div>
+    <label>Draw your signature</label>
+    <canvas id="sigCanvas" class="signature-canvas"></canvas>
+    <div class="row" style="margin-top:6px">
+      <button class="btn btn-secondary" onclick="clearSig()" style="padding:4px 10px;font-size:12px">Clear</button>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Type your full legal name</label>
+      <input id="typedName" style="width:100%;font-family:'Brush Script MT',cursive;font-size:20px" />
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="intentChk" />
+      I intend this to be my legal electronic signature.
+    </label>
+    <div class="row" style="margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveSignature(${markerIdx})">Apply Signature</button>
+    </div>
+  `);
+  setupSigCanvas();
+}
+
+let sigCtx, sigDrawing = false, sigHasInk = false;
+function setupSigCanvas() {
+  const canvas = document.getElementById("sigCanvas");
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  sigCtx = canvas.getContext("2d");
+  sigCtx.lineWidth = 2; sigCtx.strokeStyle = "#1a1f2e"; sigCtx.lineCap = "round";
+  sigHasInk = false;
+  const start = (e) => { sigDrawing = true; sigCtx.beginPath(); const p = pos(e, canvas); sigCtx.moveTo(p.x, p.y); };
+  const move = (e) => { if (!sigDrawing) return; const p = pos(e, canvas); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigHasInk = true; };
+  const end = () => { sigDrawing = false; };
+  canvas.onmousedown = start; canvas.onmousemove = move; canvas.onmouseup = end; canvas.onmouseleave = end;
+  canvas.ontouchstart = (e) => { e.preventDefault(); start(e.touches[0]); };
+  canvas.ontouchmove = (e) => { e.preventDefault(); move(e.touches[0]); };
+  canvas.ontouchend = (e) => { e.preventDefault(); end(); };
+}
+function pos(e, c) { const r = c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function clearSig() { sigCtx.clearRect(0, 0, sigCtx.canvas.width, sigCtx.canvas.height); sigHasInk = false; }
+
+async function saveSignature(idx) {
+  if (!sigHasInk) return alert("Please draw your signature.");
+  const typed = document.getElementById("typedName").value.trim();
+  if (!typed) return alert("Type your full legal name.");
+  if (!document.getElementById("intentChk").checked) return alert("You must confirm intent to sign.");
+  const dataUrl = document.getElementById("sigCanvas").toDataURL("image/png");
+  const sig = state.signSession.currentSig;
+  const data = sig.signature_data || [];
+  data[idx] = {
+    drawn_signature: dataUrl,
+    typed_name: typed,
+    timestamp: new Date().toISOString(),
+    intent_confirmed: true,
+    ip: state.ip
+  };
+  sig.signature_data = data;
+  await supabase.from("signatures").update({ signature_data: data }).eq("id", sig.id);
+  await logAudit("signature_placed", state.signSession.emp.id, state.signSession.forms[state.signSession.current].id, { marker_index: idx, typed_name: typed });
+  closeModal();
+  // Re-render to update markers
+  const form = state.signSession.forms[state.signSession.current];
+  document.querySelectorAll("#signPdfViewer .pdf-page").forEach(w => {
+    w.querySelectorAll(".sig-marker").forEach(n => n.remove());
+    placeMarkersOnSignWrap(w, parseInt(w.dataset.page), form);
+  });
+  updateSignProgress();
+}
+
+async function submitCurrentForm() {
+  const form = state.signSession.forms[state.signSession.current];
+  const sig = state.signSession.currentSig;
+  const data = sig.signature_data || [];
+  if (data.filter(Boolean).length < form.signature_markers.length) {
+    return alert("Please complete every signature block before submitting.");
+  }
+  await supabase.from("signatures").update({
+    status: "completed",
+    signed_at: new Date().toISOString()
+  }).eq("id", sig.id);
+  await logAudit("form_completed", state.signSession.emp.id, form.id, {});
+  state.signSession.current++;
+  await refreshAll();
+  showCurrentForm();
+}
+
+function showCompletionScreen() {
+  const { emp, forms } = state.signSession;
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <div class="card" style="max-width:760px;margin:0 auto">
+      <h2 style="color:var(--success)">✓ All forms signed</h2>
+      <div class="download-notice">
+        <h3>Important — Save Your Copy</h3>
+        <p>This is your only opportunity to save a copy directly from this portal. <strong>It is your responsibility to keep a personal copy</strong> of each signed document for your records.</p>
+        <div>
+          ${forms.map((f, i) => `
+            <button class="btn" style="margin:4px" onclick="downloadCopy(${i})">Download: ${escapeHtml(f.name)}</button>
+          `).join("")}
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:13px">Signed as ${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name)} · ${escapeHtml(emp.email)} · IP ${escapeHtml(state.ip)} · ${new Date().toLocaleString()}</p>
+      <button class="btn btn-secondary" onclick="goTo('dashboard')">Return to Dashboard</button>
+    </div>
+  `;
+  logAudit("session_complete", emp.id, null, {});
+}
+
+function downloadCopy(i) {
+  const form = state.signSession.forms[i];
+  const sig = state.signatures.find(s => s.form_id === form.id && s.employee_id === state.signSession.emp.id);
+  if (!sig) return;
+  const html = `<!DOCTYPE html><html><head><title>${form.name}</title>
+    <style>body{font-family:sans-serif;padding:30px;max-width:800px;margin:auto}
+    .blk{border:1px solid #ccc;padding:14px;margin:10px 0;border-radius:6px}
+    img{max-height:60px;border-bottom:1px solid #333}</style></head><body>
+    <h1>${escapeHtml(form.name)}</h1>
+    <p><strong>Signer:</strong> ${escapeHtml(state.signSession.emp.first_name)} ${escapeHtml(state.signSession.emp.last_name)} (${escapeHtml(state.signSession.emp.email)})</p>
+    <p><strong>Record ID:</strong> ${sig.record_id} · <strong>IP:</strong> ${sig.ip_address} · <strong>Signed:</strong> ${new Date(sig.signed_at).toLocaleString()}</p>
+    <p style="font-size:12px;color:#666">ESIGN consent given: ${new Date(sig.esign_consent_at).toLocaleString()}. This electronic record is legally equivalent to a handwritten signature under the ESIGN Act and UETA.</p>
+    <hr/>
+    ${(sig.signature_data || []).map((s, i) => s ? `
+      <div class="blk"><strong>Signature ${i + 1}</strong><br/>
+        <img src="${s.drawn_signature}" /><br/>
+        <em>${escapeHtml(s.typed_name)}</em><br/>
+        Signed ${new Date(s.timestamp).toLocaleString()} · IP ${escapeHtml(s.ip)}
+      </div>` : "").join("")}
+    </body></html>`;
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${form.name.replace(/[^a-z0-9]/gi, "_")}_${state.signSession.emp.last_name}_${state.signSession.emp.first_name}.html`;
+  a.click();
+}
+
+// ===== REMINDERS =====
+function renderReminders(main) {
+  // Compute reminder queue from forms + employees
+  const today = new Date();
+  const queue = [];
+  state.forms.forEach(f => {
+    if (!f.due_date || !f.active) return;
+    const due = new Date(f.due_date);
+    const assigned = state.employees.filter(e => {
+      if (!f.required_departments || !f.required_departments.length) return true;
+      return f.required_departments.includes(e.department);
+    });
+    assigned.forEach(emp => {
+      const sig = state.signatures.find(s => s.employee_id === emp.id && s.form_id === f.id && s.status === "completed");
+      if (sig) return;
+      const diffDays = Math.ceil((due - today) / 86400000);
+      let type = null;
+      if (diffDays === 7) type = "Day -7 (email + Teams)";
+      else if (diffDays === 3) type = "Day -3 (email + Teams)";
+      else if (diffDays === 1) type = "Day -1 (email + Teams)";
+      else if (diffDays <= 0) type = "Supervisor escalation";
+      if (type) queue.push({ emp, form: f, type, daysLeft: diffDays });
+    });
+  });
+
+  main.innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <h2>Reminder Queue (${queue.length})</h2>
+        <button class="btn btn-secondary" onclick="exportReminders()">Export CSV</button>
+      </div>
+      <p style="color:var(--muted);font-size:13px">Schedule: Day -7, -3, -1 via email + Teams to the employee, then escalation to supervisor on/after due date. Wire your M365 connector to auto-send.</p>
+      ${queue.length === 0 ? '<div class="empty-state">No reminders pending</div>' : `
+        <table>
+          <thead><tr><th>Employee</th><th>Form</th><th>Days Left</th><th>Reminder Type</th><th>Channel</th></tr></thead>
+          <tbody>
+            ${queue.map(q => `
+              <tr>
+                <td>${escapeHtml(q.emp.folder_name || "")}<br/><span style="font-size:11px;color:var(--muted)">${escapeHtml(q.emp.email)}</span></td>
+                <td>${escapeHtml(q.form.name)}</td>
+                <td>${q.daysLeft <= 0 ? `<span class="badge badge-danger">${q.daysLeft} (overdue)</span>` : `<span class="badge badge-warning">${q.daysLeft}</span>`}</td>
+                <td>${q.type}</td>
+                <td>${q.type.includes("supervisor") ? escapeHtml(q.emp.supervisor_email || "—") : escapeHtml(q.emp.email)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+  `;
+  window._reminderQueue = queue;
+}
+
+function exportReminders() {
+  const q = window._reminderQueue || [];
+  const rows = [["Employee", "Email", "Supervisor Email", "Form", "Due Date", "Days Left", "Reminder Type"]];
+  q.forEach(r => rows.push([r.emp.folder_name || "", r.emp.email, r.emp.supervisor_email || "", r.form.name, r.form.due_date || "", r.daysLeft, r.type]));
+  downloadCsv("reminder-queue.csv", rows);
+}
+
+// ===== REPORTS =====
+function renderReports(main) {
+  const depts = [...new Set(state.employees.map(e => e.department).filter(Boolean))].sort();
+  main.innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <h2>Reports</h2>
+        <button class="btn btn-secondary" onclick="exportReport()">Export CSV</button>
+      </div>
+      <div class="filters">
+        <select id="rptDept" onchange="rerenderReport()"><option value="">All departments</option>${depts.map(d => `<option>${escapeHtml(d)}</option>`).join("")}</select>
+        <select id="rptForm" onchange="rerenderReport()"><option value="">All forms</option>${state.forms.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("")}</select>
+        <select id="rptStatus" onchange="rerenderReport()"><option value="">All statuses</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
+      </div>
+      <div id="deptSummary"></div>
+      <div id="reportTable"></div>
+    </div>
+  `;
+  rerenderReport();
+}
+
+function rerenderReport() {
+  const dept = document.getElementById("rptDept").value;
+  const formId = document.getElementById("rptForm").value;
+  const status = document.getElementById("rptStatus").value;
+
+  // Department summary
+  const depts = [...new Set(state.employees.map(e => e.department).filter(Boolean))].sort();
+  let summaryHtml = '<div class="stats-grid" style="margin-bottom:16px">';
+  depts.forEach(d => {
+    if (dept && dept !== d) return;
+    const empsInDept = state.employees.filter(e => e.department === d);
+    const sigCount = state.signatures.filter(s => s.status === "completed" && empsInDept.find(e => e.id === s.employee_id)).length;
+    const expected = empsInDept.length * state.forms.filter(f => f.active && (!f.required_departments?.length || f.required_departments.includes(d))).length;
+    const pct = expected ? Math.round(sigCount / expected * 100) : 0;
+    summaryHtml += `<div class="stat"><div class="stat-label">${escapeHtml(d)}</div><div class="stat-value">${pct}%</div><div style="font-size:12px;color:var(--muted)">${sigCount}/${expected} signed</div></div>`;
+  });
+  summaryHtml += "</div>";
+  document.getElementById("deptSummary").innerHTML = summaryHtml;
+
+  // Detail rows
+  const rows = [];
+  state.employees.forEach(emp => {
+    if (dept && emp.department !== dept) return;
+    state.forms.forEach(f => {
+      if (formId && f.id !== formId) return;
+      if (f.required_departments?.length && !f.required_departments.includes(emp.department)) return;
+      const sig = state.signatures.find(s => s.employee_id === emp.id && s.form_id === f.id);
+      const st = sig?.status === "completed" ? "completed" : "pending";
+      if (status && st !== status) return;
+      rows.push({ emp, f, sig, st });
+    });
+  });
+
+  document.getElementById("reportTable").innerHTML = `
+    <table>
+      <thead><tr><th>Employee</th><th>Dept</th><th>Form</th><th>Due</th><th>Signed</th><th>Status</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td>${escapeHtml(r.emp.folder_name || "")}<br/><span style="font-size:11px;color:var(--muted)">${escapeHtml(r.emp.email)}</span></td>
+            <td>${escapeHtml(r.emp.department || "")}</td>
+            <td>${escapeHtml(r.f.name)}</td>
+            <td>${r.f.due_date || "—"}</td>
+            <td>${r.sig?.signed_at ? new Date(r.sig.signed_at).toLocaleDateString() : "—"}</td>
+            <td>${statusBadge(r.st)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+  window._reportRows = rows;
+}
+
+function exportReport() {
+  const rows = window._reportRows || [];
+  const out = [["Employee", "Email", "Department", "Supervisor Email", "Form", "Due Date", "Signed Date", "Status", "Record ID"]];
+  rows.forEach(r => out.push([
+    r.emp.folder_name || "", r.emp.email, r.emp.department || "", r.emp.supervisor_email || "",
+    r.f.name, r.f.due_date || "", r.sig?.signed_at || "", r.st, r.sig?.record_id || ""
+  ]));
+  downloadCsv("acknowledgment-report.csv", out);
+}
+
+// ===== AUDIT =====
+function renderAudit(main) {
+  main.innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <h2>Audit Log</h2>
+        <button class="btn btn-secondary" onclick="exportAudit()">Export CSV</button>
+      </div>
+      <div class="filters">
+        <input id="auditFilter" placeholder="Search by event, employee, IP..." oninput="rerenderAudit()" style="flex:1;min-width:240px" />
+      </div>
+      <div id="auditTable"></div>
+    </div>
+  `;
+  rerenderAudit();
+}
+
+function rerenderAudit() {
+  const q = (document.getElementById("auditFilter")?.value || "").toLowerCase();
+  const rows = state.audit.filter(a => {
+    const emp = state.employees.find(e => e.id === a.employee_id);
+    const blob = `${a.event_type} ${a.ip_address || ""} ${emp?.folder_name || ""}`.toLowerCase();
+    return blob.includes(q);
+  });
+  document.getElementById("auditTable").innerHTML = `
+    <table>
+      <thead><tr><th>When</th><th>Event</th><th>Employee</th><th>Form</th><th>IP</th></tr></thead>
+      <tbody>
+        ${rows.map(a => {
+          const emp = state.employees.find(e => e.id === a.employee_id);
+          const f = state.forms.find(f => f.id === a.form_id);
+          return `
+            <tr>
+              <td>${new Date(a.created_at).toLocaleString()}</td>
+              <td>${a.event_type.replace(/_/g, " ")}</td>
+              <td>${escapeHtml(emp?.folder_name || "—")}</td>
+              <td>${escapeHtml(f?.name || "—")}</td>
+              <td style="font-family:monospace;font-size:12px">${escapeHtml(a.ip_address || "")}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function exportAudit() {
+  const rows = [["Timestamp", "Event", "Employee", "Email", "Form", "IP", "User Agent"]];
+  state.audit.forEach(a => {
+    const emp = state.employees.find(e => e.id === a.employee_id);
+    const f = state.forms.find(f => f.id === a.form_id);
+    rows.push([a.created_at, a.event_type, emp?.folder_name || "", emp?.email || "", f?.name || "", a.ip_address || "", a.user_agent || ""]);
+  });
+  downloadCsv("audit-log.csv", rows);
+}
+
+// ===== Helpers =====
+function showModal(html) {
+  closeModal();
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.innerHTML = `<div class="modal">${html}</div>`;
+  ov.id = "modalOverlay";
+  document.body.appendChild(ov);
+}
+function closeModal() { document.getElementById("modalOverlay")?.remove(); }
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function downloadCsv(name, rows) {
+  const csv = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+}
+
+window.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
